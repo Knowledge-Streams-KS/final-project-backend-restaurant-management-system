@@ -9,5 +9,6 @@ authRouter.get("/users", authenticateToken, userController.getAll);
 authRouter.get("/user/:id", userController.getSingle);
 authRouter.delete("/user/:id", userController.delete);
 authRouter.get("/user/verify/:id/:token", emailVerification);
+authRouter.post("/auth/verifytoken", userController.signUpToken);
 
 export default authRouter;
