@@ -65,10 +65,14 @@ const userController = {
       const token = jwt.sign(data, process.env.JWT_SECRET_KEY, {
         expiresIn: "5h",
       });
+      const expiresAt = new Date();
+      // expiresAt.setMinutes(expiresAt.getMinutes() + 1);
+      expiresAt.setHours(expiresAt.getHours() + 5);
       await tokenModel.create(
         {
           token,
           UserId: newUser.id,
+          expiresAt,
         },
         { transaction: t }
       );
@@ -120,10 +124,14 @@ const userController = {
       const token = jwt.sign(data, process.env.JWT_SECRET_KEY, {
         expiresIn: "5h",
       });
+      const expiresAt = new Date();
+      // expiresAt.setMinutes(expiresAt.getMinutes() + 1);
+      expiresAt.setHours(expiresAt.getHours() + 5);
 
       await tokenModel.create({
         token,
         UserId: user.id,
+        expiresAt,
       });
 
       res.status(200).json({ message: "Login Successfully", token });
@@ -189,7 +197,51 @@ const userController = {
   },
   signUpToken: async (req, res) => {
     try {
-    } catch (error) {}
+      const { email, password } = req.body;
+      const user = await userModel.findOne({ where: { email } });
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      const isMatch = await compare(password, user.password);
+      if (!isMatch) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+      if (user.verified === true) {
+        return res.status(401).json({
+          message: "User already verified",
+        });
+      }
+      const existingToken = await tokenModel.findOne({
+        where: { UserId: user.id },
+      });
+      if (existingToken) {
+        await existingToken.destroy();
+      }
+      const data = {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      };
+      const token = jwt.sign(data, process.env.JWT_SECRET_KEY, {
+        expiresIn: "5h",
+      });
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 5);
+
+      await tokenModel.create({
+        token,
+        UserId: user.id,
+        expiresAt,
+      });
+      const message = `${process.env.BASE_URL}/user/verify/${user.id}/${token}`;
+      await sendEmail(user.email, "Verify Email", message);
+      res
+        .status(200)
+        .json({ message: "A new verification email has been sent!" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
   },
 };
 export default userController;
