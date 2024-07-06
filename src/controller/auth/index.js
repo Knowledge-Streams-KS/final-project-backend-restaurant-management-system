@@ -20,7 +20,6 @@ const userController = {
   },
   getSingle: async (req, res) => {
     try {
-      const payload = req.body;
       const id = parseInt(req.params.id);
       const user = await userModel.findByPk(id);
       if (!user) {
