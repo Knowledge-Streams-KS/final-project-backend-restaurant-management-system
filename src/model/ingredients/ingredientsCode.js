@@ -10,6 +10,7 @@ const ingredientsCode = sequelize.define("Ingredients Code", {
     type: DataTypes.STRING,
     allowNull: false,
     unique: true,
+    primaryKey: true,
   },
   unit: {
     type: DataTypes.STRING,
