@@ -3,6 +3,7 @@ import findAvailableTable from "../../middlewear/checkTable/index.js";
 import findTable from "../../middlewear/checkTable/index.js";
 import reservation from "../../model/reservation/index.js";
 import customerModel from "../../model/user/customer.js";
+import { generateAndSendOtp } from "../../utils/otp/index.js";
 
 const reservationCURD = {
   getAll: async (req, res) => {
@@ -61,8 +62,9 @@ const reservationCURD = {
           startTime: sTime,
           endTime: eTime,
         });
+        generateAndSendOtp(checkEmail.id, checkEmail.email);
         return res.status(201).json({
-          message: `Reservation Created Successfully!`,
+          message: `Email with OTP Send`,
           newReservation,
         });
       }
@@ -78,8 +80,9 @@ const reservationCURD = {
         startTime: sTime,
         endTime: eTime,
       });
+      generateAndSendOtp(newUser.id, email);
       return res.status(201).json({
-        message: `Reservation successfully created!`,
+        message: `Email with OTP send Successfully!`,
         newReservation,
       });
     } catch (error) {
@@ -89,8 +92,32 @@ const reservationCURD = {
   },
   update: async (req, res) => {
     try {
+      const { reservationId, newStartTime, newEndTime } = req.body;
+      const existingReservation = await reservation.findByPk(reservationId);
+      if (!existingReservation) {
+        return res.status(404).json({ message: "Reservation not found" });
+      }
+      const checkOrderTable = await findAvailableTable(
+        newStartTime,
+        newEndTime
+      );
+      if (!checkOrderTable) {
+        return res.status(409).json({
+          message: `No table available for the time slot ${newStartTime}-${newEndTime}`,
+        });
+      }
+
+      existingReservation.startTime = newStartTime;
+      existingReservation.endTime = newEndTime;
+      await existingReservation.save();
+
+      return res.status(200).json({
+        message: "Reservation time slots updated successfully",
+        updatedReservation: existingReservation,
+      });
     } catch (error) {
-      res.status(500).json({ message: "Internal Server Error!!" });
+      console.log(error);
+      return res.status(500).json({ message: "Internal Server Error" });
     }
   },
   delete: async (req, res) => {
