@@ -3,40 +3,28 @@ import sequelize from "../../db/config.js";
 import recipe from "../Recipe/index.js";
 import ingredientsCode from "./ingredientsCode.js";
 
-const recipeIngredients = sequelize.define(
-  "IngredientsRecipe",
-  {
-    // id: {
-    //   type: DataTypes.INTEGER,
-    //   allowNull: false,
-    //   unique: true,
-    //   primaryKey: true,
-    // },
-    recipeId: {
-      type: DataTypes.STRING,
-      references: {
-        model: recipe,
-        key: "recipeId",
-      },
-      allowNull: false,
+const recipeIngredients = sequelize.define("IngredientsRecipe", {
+  recipeId: {
+    type: DataTypes.STRING,
+    references: {
+      model: recipe,
+      key: "recipeId",
     },
-    ingredCode: {
-      type: DataTypes.STRING,
-      references: {
-        model: ingredientsCode,
-        key: "code",
-      },
-      allowNull: false,
-    },
-    quantity: {
-      type: DataTypes.FLOAT,
-      allowNull: false,
-    },
+    allowNull: false,
   },
-  {
-    timestamps: true,
-  }
-);
+  ingredCode: {
+    type: DataTypes.STRING,
+    references: {
+      model: ingredientsCode,
+      key: "code",
+    },
+    allowNull: false,
+  },
+  quantity: {
+    type: DataTypes.FLOAT,
+    allowNull: false,
+  },
+});
 
 recipe.belongsToMany(ingredientsCode, {
   through: "IngredientsRecipe",
