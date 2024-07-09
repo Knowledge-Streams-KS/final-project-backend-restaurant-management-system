@@ -3,6 +3,7 @@ import ingredientsCode from "../model/ingredients/ingredientsCode.js";
 import order from "../model/order/index.js";
 import orderItem from "../model/order/orderItem.js";
 import orderTable from "../model/ordertable/index.js";
+import Otp from "../model/otp/index.js";
 import recipe from "../model/Recipe/index.js";
 import reservation from "../model/reservation/index.js";
 import stock from "../model/stock/index.js";
@@ -25,6 +26,7 @@ const syncDB = async () => {
   await order.sync({ alter: true, force: false });
   await orderItem.sync({ alter: true, force: false });
   await customerModel.sync({ alter: true, force: false });
+  await Otp.sync({ alter: true, force: false });
   await reservation.sync({ alter: true, force: false });
 };
 
