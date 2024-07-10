@@ -2,7 +2,6 @@ import { Op } from "sequelize";
 import reservation from "../../model/reservation/index.js";
 import orderTable from "../../model/ordertable/index.js";
 
-
 const findAvailableTable = async (startTime, endTime) => {
   try {
     const tables = await orderTable.findAll();
@@ -10,6 +9,9 @@ const findAvailableTable = async (startTime, endTime) => {
       const conflictingReservation = await reservation.findOne({
         where: {
           tableId: table.id,
+          status: {
+            [Op.not]: "checked-out",
+          },
           [Op.or]: [
             {
               startTime: { [Op.lt]: endTime },
@@ -38,5 +40,3 @@ const findAvailableTable = async (startTime, endTime) => {
 };
 
 export default findAvailableTable;
-
-

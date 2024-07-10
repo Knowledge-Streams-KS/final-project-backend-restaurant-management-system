@@ -56,7 +56,6 @@ const inventoryPurchase = {
           .status(201)
           .json({ message: "Inventory Added", newIngredientsId });
       }
-
       await stock.create({
         ingredientCode: ingredientsId,
         totalQuantity: quantity,

@@ -76,7 +76,17 @@ const userController = {
         { transaction: t }
       );
       const message = `${process.env.BASE_URL}/user/verify/${newUser.id}/${token}`;
-      await sendEmail(payload.email, "Verify Email", message);
+      const emailData = {
+        fname: payload.firstName,
+        lname: payload.lastName,
+        link: message,
+      };
+      await sendEmail(
+        payload.email,
+        "Verify Email",
+        "verify_email.handlebars",
+        emailData
+      );
       await t.commit();
       res.status(201).json({ message: "An Email was Send!" });
     } catch (error) {
