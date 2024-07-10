@@ -106,11 +106,9 @@ const reservationCURD = {
           message: `No table available for the time slot ${newStartTime}-${newEndTime}`,
         });
       }
-
       existingReservation.startTime = newStartTime;
       existingReservation.endTime = newEndTime;
       await existingReservation.save();
-
       return res.status(200).json({
         message: "Reservation time slots updated successfully",
         updatedReservation: existingReservation,

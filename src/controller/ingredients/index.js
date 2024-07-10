@@ -40,7 +40,7 @@ const recipeCurd = {
   create: async (req, res) => {
     const t = await sequelize.transaction();
     try {
-      const { type, title, size, recipeId, ingredients } = req.body;
+      const { type, title, size, recipeId, ingredients, price } = req.body;
       const existingRecipe = await recipe.findOne({
         where: { recipeId: recipeId },
       });
@@ -69,6 +69,7 @@ const recipeCurd = {
           size,
           type,
           recipeId,
+          price,
         },
         { transaction: t }
       );

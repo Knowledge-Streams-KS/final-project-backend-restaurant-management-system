@@ -2,6 +2,7 @@ import { DataTypes, or } from "sequelize";
 import sequelize from "../../db/config.js";
 import orderTable from "../ordertable/index.js";
 import userModel from "../user/index.js";
+import customerModel from "../user/customer.js";
 
 const order = sequelize.define("Order", {
   tableId: {
@@ -12,13 +13,21 @@ const order = sequelize.define("Order", {
     },
     allowNull: false,
   },
-  userId: {
+  employeeId: {
     type: DataTypes.INTEGER,
     references: {
       model: userModel,
       key: "id",
     },
     allowNull: false,
+  },
+  customerId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: customerModel,
+      key: "id",
+    },
+    allowNull: true,
   },
   status: {
     type: DataTypes.ENUM("pending", "processed", "served", "billed"),
@@ -30,8 +39,8 @@ const order = sequelize.define("Order", {
     allowNull: false,
   },
 });
-userModel.hasMany(order, { foreignKey: "userId" });
-order.belongsTo(userModel, { foreignKey: "userId" });
+userModel.hasMany(order, { foreignKey: "employeeId" });
+order.belongsTo(userModel, { foreignKey: "employeeId" });
 order.belongsTo(orderTable, { foreignKey: "tableId" });
 orderTable.hasMany(order, { foreignKey: "tableId" });
 export default order;
