@@ -1,4 +1,6 @@
+import { Op } from "sequelize";
 import orderTable from "../../model/ordertable/index.js";
+import reservation from "../../model/reservation/index.js";
 
 const orderTableCURD = {
   getAll: async (req, res) => {
@@ -27,6 +29,7 @@ const orderTableCURD = {
   create: async (req, res) => {
     try {
       const { tableNo, seats } = req.body;
+      console.log(tableNo);
       const checktableNo = await orderTable.findOne({
         where: {
           tableNo: tableNo,
@@ -51,11 +54,13 @@ const orderTableCURD = {
   },
   update: async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = req.params.id;
+      console.log(req.params.id);
       const { seats } = req.body;
       const checkOrderTable = await orderTable.findOne({
-        where: { tableNo: id },
+        where: { id: id },
       });
+      console.log(checkOrderTable);
       if (!checkOrderTable) {
         return res
           .status(404)
@@ -66,24 +71,31 @@ const orderTableCURD = {
       res
         .status(200)
         .json({ message: `Seats of table id ${id} updated ${seats}` });
-    } catch (error) {}
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({ message: "Internal Server Error!" });
+    }
   },
   delete: async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = req.params.id;
+      console.log("iddddd-------------", id, req.params.id);
       const checkOrderTable = await orderTable.findOne({
-        where: { tableNo: id },
+        where: { id: id },
       });
       if (!checkOrderTable) {
         return res.status(404).json({ message: `No table with this id ${id}` });
       }
-      if (
-        checkOrderTable.status === "booked" ||
-        checkOrderTable.status === "reserved"
-      ) {
-        return res.status(409).json({
-          message: `Can not delete table with this id ${id} is ${checkOrderTable.status}`,
-        });
+      const checkReservation = await reservation.findAll({
+        where: {
+          tableId: id,
+          status: {
+            [Op.in]: ["pending", "checked-in", "confirmed"],
+          },
+        },
+      });
+      if (checkReservation.length > 0) {
+        return res.status(409).json({ message: "Table is currently in use" });
       }
       checkOrderTable.destroy();
       res.status(200).json({ message: `Table with this id ${id} deleted` });

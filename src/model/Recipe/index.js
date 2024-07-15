@@ -13,7 +13,7 @@ const recipe = sequelize.define("Recipe", {
     allowNull: false,
   },
   size: {
-    type: DataTypes.STRING,
+    type: DataTypes.ENUM("small", "medium", "large"),
     allowNull: false,
   },
   price: {

@@ -35,6 +35,7 @@ const userController = {
     const t = await sequelize.transaction();
     try {
       const payload = req.body;
+      console.log(payload);
       const user = await userModel.findOne({
         where: {
           email: payload.email,

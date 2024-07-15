@@ -5,6 +5,7 @@ import orderAuth from "./order/index.js";
 import orderTableAuth from "./orderTable/index.js";
 import reservationRouter from "./reservation/index.js";
 import inventoryRouter from "./stock/inventory.js";
+import timeSlotsRouter from "./timeSlots/index.js";
 
 const allRouters = [
   authRouter,
@@ -14,6 +15,7 @@ const allRouters = [
   orderTableAuth,
   reservationRouter,
   orderAuth,
+  timeSlotsRouter,
 ];
 
 export default allRouters;
