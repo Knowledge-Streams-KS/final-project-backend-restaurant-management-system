@@ -4,6 +4,7 @@ import sendEmail from "../email/index.js";
 import { Op } from "sequelize";
 import reservation from "../../model/reservation/index.js";
 import customerModel from "../../model/user/customer.js";
+import timeSlotModel from "../../model/timeslots/index.js";
 
 const generateOtpCode = () => {
   return otpGenerator.generate(5, {
@@ -12,23 +13,47 @@ const generateOtpCode = () => {
     specialChars: false,
   });
 };
-const generateAndSendOtp = async (customerId, email) => {
-  const otpCode = generateOtpCode();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+const generateAndSendOtp = async (customerId) => {
+  try {
+    console.log("customerid", customerId);
 
-  await Otp.create({
-    customerId,
-    otpCode,
-    expiresAt,
-  });
+    const otpCode = generateOtpCode();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    const findCustomer = await customerModel.findByPk(customerId);
+    if (!findCustomer) {
+      throw new Error({ message: `No customer with this id: ${customerId}` });
+    }
 
-  await sendEmail(email, "Verify OTP", "otp.handlebars", { otpCode });
+    // Destroy any existing OTP record for the customer
+    const checkOtp = await Otp.findOne({
+      where: {
+        customerId: customerId,
+      },
+    });
+    if (checkOtp) {
+      await checkOtp.destroy();
+    }
+
+    // Create new OTP record
+    await Otp.create({
+      customerId,
+      otpCode,
+      expiresAt,
+    });
+    await sendEmail(findCustomer.email, "Verify OTP", "otp.handlebars", {
+      otpCode,
+    });
+    return null;
+  } catch (error) {
+    console.error(error);
+    throw new Error("Internal Server Error");
+  }
 };
 
 const validateOtp = async (req, res) => {
   try {
     const { customerId, otpCode } = req.body;
-
+    console.log(req.body);
     const otpRecord = await Otp.findOne({
       where: {
         customerId,
@@ -49,23 +74,29 @@ const validateOtp = async (req, res) => {
         status: "pending",
       },
       order: [["createdAt", "DESC"]],
+      include: [
+        {
+          model: customerModel,
+        },
+        { model: timeSlotModel },
+      ],
     });
 
     if (!reservationRecord) {
       return res.status(404).json({ message: "No pending reservation found" });
     }
     await reservationRecord.update({ status: "confirmed" });
-    const userInfo = await customerModel.findByPk(customerId);
 
     const data = {
-      fname: userInfo.firstName,
-      lname: userInfo.lastName,
-      stime: reservationRecord.startTime,
-      etime: reservationRecord.endTime,
+      fname: reservationRecord.Customer.firstName,
+      lname: reservationRecord.Customer.lastName,
+      date: reservationRecord.date,
+      stime: reservationRecord.TimeSlot.startTime,
+      etime: reservationRecord.TimeSlot.endTime,
       tableId: reservationRecord.tableId,
     };
     await sendEmail(
-      userInfo.email,
+      reservationRecord.Customer.email,
       "Reservation Confirmation",
       "confirmation.handlebars",
       data
@@ -77,7 +108,7 @@ const validateOtp = async (req, res) => {
       reservation: reservationRecord,
     });
   } catch (error) {
-    console.error("Error validating OTP:", error);
+    console.log(error);
     res.status(500).json({ message: "Internal Server Error!" });
   }
 };

@@ -13,7 +13,16 @@ import customerModel from "../../model/user/customer.js";
 const orderCURD = {
   getAll: async (req, res) => {
     try {
-      const allOrders = await order.findAll();
+      const allOrders = await order.findAll({
+        include: [
+          {
+            model: userModel,
+          },
+          {
+            model: customerModel,
+          },
+        ],
+      });
       res.status(200).json(allOrders);
     } catch (error) {
       console.log(error);
@@ -61,54 +70,19 @@ const orderCURD = {
           message: `Customer ${customerId} already have an active order`,
         });
       }
-      let tableId;
-      let startTime;
-      let endTime;
-      const currentTime = new Date();
-      const oneHourLater = new Date(currentTime.getTime() + 60 * 60 * 1000);
-      if (customerId) {
-        const checkReservation = await reservation.findOne({
-          where: {
-            customerId: customerId,
-            status: "confirmed",
-          },
-          order: [["createdAt", "DESC"]],
-          transaction: t,
-        });
-
-        if (checkReservation) {
-          tableId = checkReservation.tableId;
-          startTime = checkReservation.startTime;
-          endTime = checkReservation.endTime;
-          await checkReservation.update(
-            { status: "checked-in" },
-            { transaction: t }
-          );
-        }
-      }
-      if (!tableId) {
-        const availableTable = await findAvailableTable(
-          currentTime,
-          oneHourLater,
-          t
-        );
-        if (!availableTable) {
-          await t.rollback();
-          return res.status(409).json({
-            message: `No table available for the time slot ${currentTime}-${oneHourLater}`,
-          });
-        }
-        const newReservation = await reservation.create({
+      const checkReservation = await reservation.findOne({
+        where: {
           customerId: customerId,
-          tableId: availableTable.id,
-          startTime: currentTime,
-          endTime: oneHourLater,
           status: "checked-in",
-        });
-
-        tableId = availableTable.id;
-        startTime = currentTime;
-        endTime = oneHourLater;
+        },
+        order: [["createdAt", "DESC"]],
+        transaction: t,
+      });
+      if (!checkReservation) {
+        await t.rollback();
+        return res
+          .status(409)
+          .json({ message: `No reservation found for the ${checkCustomerId}` });
       }
       let totalAmount = 0;
       const newOrder = await order.create(
@@ -140,17 +114,17 @@ const orderCURD = {
           where: { recipeId: item.recipeId },
           transaction: t,
         });
+
         for (const ingredient of ingredients) {
           const checkStock = await stock.findOne({
             where: { ingredientCode: ingredient.ingredCode },
             transaction: t,
           });
-          console.log(
-            "Check Stock",
-            checkStock.totalQuantity,
-            "Ingredient Code",
-            ingredient.ingredCode
-          );
+          if (!checkStock) {
+            return res.status(409).json({
+              message: `Ingredient  ${ingredient.ingredCode} of recipe ${item.recipeId} are not available in stock`,
+            });
+          }
           if (
             !checkStock.totalQuantity ||
             checkStock.totalQuantity < ingredient.quantity * item.quantity

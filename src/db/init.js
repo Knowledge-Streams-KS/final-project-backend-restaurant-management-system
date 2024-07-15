@@ -8,6 +8,7 @@ import recipe from "../model/Recipe/index.js";
 import reservation from "../model/reservation/index.js";
 import stock from "../model/stock/index.js";
 import inventory from "../model/stock/inventory.js";
+import timeSlotModel from "../model/timeslots/index.js";
 import tokenModel from "../model/token/index.js";
 import customerModel from "../model/user/customer.js";
 import userModel from "../model/user/index.js";
@@ -27,6 +28,7 @@ const syncDB = async () => {
   await orderItem.sync({ alter: true, force: false });
   await customerModel.sync({ alter: true, force: false });
   await Otp.sync({ alter: true, force: false });
+  await timeSlotModel.sync({ alter: true, force: false });
   await reservation.sync({ alter: true, force: false });
 };
 

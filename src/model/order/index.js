@@ -1,4 +1,4 @@
-import { DataTypes, or } from "sequelize";
+import { DataTypes } from "sequelize";
 import sequelize from "../../db/config.js";
 import orderTable from "../ordertable/index.js";
 import userModel from "../user/index.js";
@@ -41,6 +41,8 @@ const order = sequelize.define("Order", {
 });
 userModel.hasMany(order, { foreignKey: "employeeId" });
 order.belongsTo(userModel, { foreignKey: "employeeId" });
+customerModel.hasMany(order, { foreignKey: "customerId" });
+order.belongsTo(customerModel, { foreignKey: "customerId" });
 order.belongsTo(orderTable, { foreignKey: "tableId" });
 orderTable.hasMany(order, { foreignKey: "tableId" });
 export default order;

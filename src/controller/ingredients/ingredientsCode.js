@@ -1,5 +1,6 @@
-import e from "express";
+import recipeIngredients from "../../model/ingredients/index.js";
 import ingredientsCode from "../../model/ingredients/ingredientsCode.js";
+import recipe from "../../model/Recipe/index.js";
 
 const ingredientsName = {
   getAll: async (req, res) => {
@@ -52,8 +53,24 @@ const ingredientsName = {
           code: code,
         },
       });
+      if (!ingredients) {
+        return res
+          .status(404)
+          .json({ message: `No ingredient code with ${code}` });
+      }
+      const checkRecipe = await recipeIngredients.findAll({
+        where: {
+          ingredCode: code,
+        },
+      });
+      console.log(checkRecipe);
+      if (checkRecipe.length > 0) {
+        return res.status(409).json({
+          message: `Ingredient code ${code} is used in a recipe and cannot be deleted`,
+        });
+      }
       await ingredients.destroy();
-      res.status(200).json({ message: "Ingredient Deleted" });
+      res.status(200).json({ message: `Ingredient with code ${code} deleted` });
     } catch (error) {
       console.log(error);
       res.status(500).json({ message: "Internal Server Error" });
