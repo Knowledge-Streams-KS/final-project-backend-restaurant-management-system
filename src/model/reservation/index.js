@@ -34,6 +34,7 @@ const reservation = sequelize.define("Reservation", {
     type: DataTypes.STRING,
     defaultValue: "pending",
   },
+  seats: { type: DataTypes.INTEGER, allowNull: false },
 });
 reservation.belongsTo(customerModel, { foreignKey: "customerId" });
 customerModel.hasMany(reservation, { foreignKey: "customerId" });

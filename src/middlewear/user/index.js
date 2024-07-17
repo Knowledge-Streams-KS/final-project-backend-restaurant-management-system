@@ -27,7 +27,7 @@ const emailVerification = async (req, res) => {
     user.verified = true;
     await user.save();
     await token.destroy();
-    res.send("email verified sucessfully");
+    res.redirect(process.env.HOMEPAGE);
   } catch (error) {
     console.log(error);
     res.status(400).send("An error occured");

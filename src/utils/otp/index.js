@@ -13,30 +13,30 @@ const generateOtpCode = () => {
     specialChars: false,
   });
 };
-const generateAndSendOtp = async (customerId) => {
+const generateAndSendOtp = async (email) => {
   try {
-    console.log("customerid", customerId);
-
+    console.log(email);
     const otpCode = generateOtpCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-    const findCustomer = await customerModel.findByPk(customerId);
+    const findCustomer = await customerModel.findOne({
+      where: { email: email },
+    });
+
     if (!findCustomer) {
-      throw new Error({ message: `No customer with this id: ${customerId}` });
+      throw new Error({ message: `No customer with this email: ${email}` });
     }
 
-    // Destroy any existing OTP record for the customer
     const checkOtp = await Otp.findOne({
       where: {
-        customerId: customerId,
+        customerId: findCustomer.id,
       },
     });
     if (checkOtp) {
       await checkOtp.destroy();
     }
 
-    // Create new OTP record
     await Otp.create({
-      customerId,
+      customerId: findCustomer.id,
       otpCode,
       expiresAt,
     });
@@ -52,11 +52,15 @@ const generateAndSendOtp = async (customerId) => {
 
 const validateOtp = async (req, res) => {
   try {
-    const { customerId, otpCode } = req.body;
+    const { email, otpCode } = req.body;
     console.log(req.body);
+    const checkCustomer = await customerModel.findOne({
+      where: { email: email },
+    });
+    console.log(checkCustomer);
     const otpRecord = await Otp.findOne({
       where: {
-        customerId,
+        customerId: checkCustomer.id,
         otpCode,
         expiresAt: {
           [Op.gt]: new Date(),
@@ -70,7 +74,7 @@ const validateOtp = async (req, res) => {
 
     const reservationRecord = await reservation.findOne({
       where: {
-        customerId,
+        customerId: checkCustomer.id,
         status: "pending",
       },
       order: [["createdAt", "DESC"]],

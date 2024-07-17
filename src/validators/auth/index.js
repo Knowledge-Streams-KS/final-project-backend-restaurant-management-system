@@ -1,5 +1,5 @@
 import Joi from "joi";
-import { roles } from "../../roles";
+import { roles } from "../../roles/index.js";
 
 const authValidators = {
   signUp: (req, res, next) => {
@@ -58,9 +58,8 @@ const authValidators = {
   },
   signIn: (req, res, next) => {
     const schema = Joi.object({
-      email: Joi.required().string().email().messages({
+      email: Joi.required().messages({
         "any.required": "Email is required",
-        "string.email": "Email must be a valid email",
       }),
       password: Joi.required().messages({
         "any.required": "Password is required",

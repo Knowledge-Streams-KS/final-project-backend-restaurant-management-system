@@ -3,6 +3,8 @@ import sequelize from "../../db/config.js";
 import recipeIngredients from "../../model/ingredients/index.js";
 import ingredientsCode from "../../model/ingredients/ingredientsCode.js";
 import recipe from "../../model/Recipe/index.js";
+import orderItem from "../../model/order/orderItem.js";
+
 const recipeCurd = {
   getAll: async (req, res) => {
     try {
@@ -119,12 +121,14 @@ const recipeCurd = {
           .status(404)
           .json({ message: `No recipe with this id ${id}` });
       }
-      const { title, size, type, ingredients } = req.body;
+      const { title, size, type, price, ingredients } = req.body;
+      console.log("------------------", ingredients);
       const existingRecipe = await recipe.findOne({
         where: {
           title: title || checkRecipe.title,
           size: size || checkRecipe.size,
           type: type || checkRecipe.type,
+          price: price || checkRecipe.price,
           recipeId: { [Op.ne]: id },
         },
       });
@@ -139,9 +143,11 @@ const recipeCurd = {
       if (title && title !== checkRecipe.title) fieldsToUpdate.title = title;
       if (size && size !== checkRecipe.size) fieldsToUpdate.size = size;
       if (type && type !== checkRecipe.type) fieldsToUpdate.type = type;
+      if (price && price !== checkRecipe.price) fieldsToUpdate.price = price;
       await checkRecipe.update(fieldsToUpdate, { transaction: t });
-      if (ingredients && ingredients.length > 0) {
+      if (ingredients && ingredients.some((ing) => ing.code && ing.quantity)) {
         for (const ingredient of ingredients) {
+          if (!ingredient.code || !ingredient.quantity) continue;
           const ingredientRecord = await ingredientsCode.findOne({
             where: { code: ingredient.code },
           });
@@ -166,7 +172,7 @@ const recipeCurd = {
             await recipeIngredients.create(
               {
                 recipeId: id,
-                ingredientCode: ingredient.code,
+                ingredCode: ingredient.code,
                 quantity: ingredient.quantity,
               },
               { transaction: t }
@@ -188,14 +194,28 @@ const recipeCurd = {
     try {
       const id = req.params.id;
       const checkRecipe = await recipe.findByPk(id);
-      if (checkRecipe) {
-        await checkRecipe.destroy();
+      if (!checkRecipe) {
         return res
-          .status(200)
-          .json({ message: `The Recipe with id ${id} has been deleted` });
+          .status(404)
+          .json({ message: `No recipe with this id ${id}` });
       }
-      res.status(404).json({ message: `No recipe with this id ${id}` });
-    } catch {
+
+      const checkOrderItems = await orderItem.findAll({
+        where: { recipeId: id },
+      });
+      console.log(checkOrderItems);
+      if (checkOrderItems.length > 0) {
+        return res.status(400).json({
+          message: `Cannot delete recipe with id ${id} as it is being used in orders'`,
+        });
+      }
+
+      await checkRecipe.destroy();
+      res
+        .status(200)
+        .json({ message: `The Recipe with id ${id} has been deleted` });
+    } catch (error) {
+      console.error(error);
       res.status(500).json({ message: "Internal Server Error!!" });
     }
   },

@@ -21,7 +21,9 @@ const orderCURD = {
           {
             model: customerModel,
           },
+          { model: orderItem, include: [{ model: recipe }] },
         ],
+        order: [["createdAt", "DESC"]],
       });
       res.status(200).json(allOrders);
     } catch (error) {
@@ -32,12 +34,20 @@ const orderCURD = {
   getSingle: async (req, res) => {
     try {
       const id = req.params.id;
-      const singleOrder = await order.findByPk(id);
+      console.log(id, req.params.id);
+      const singleOrder = await order.findByPk(id, {
+        include: [
+          { model: orderItem, include: { model: recipe } },
+          { model: userModel },
+          { model: customerModel },
+        ],
+      });
       if (!singleOrder) {
         return res.status(404).json({ message: `No Order with this ${id}` });
       }
       res.status(200).json(singleOrder);
     } catch (error) {
+      console.log(error);
       res.status(500).json({ message: "Internal Server Error!!" });
     }
   },
@@ -45,6 +55,7 @@ const orderCURD = {
     const t = await sequelize.transaction();
     try {
       const { userId, customerId, orderItems } = req.body;
+      console.log(req.body);
       if (!userId || !orderItems || orderItems.length === 0) {
         return res.status(400).json({
           message: "Invalid request. Please provide userId and orderItems.",
@@ -62,14 +73,6 @@ const orderCURD = {
           message: `No customer registered with this id ${customerId}`,
         });
       }
-      const checkActiveOrder = await order.findOne({
-        where: { customerId: customerId, status: { [Op.ne]: "billed" } },
-      });
-      if (checkActiveOrder) {
-        return res.status(409).json({
-          message: `Customer ${customerId} already have an active order`,
-        });
-      }
       const checkReservation = await reservation.findOne({
         where: {
           customerId: customerId,
@@ -78,24 +81,142 @@ const orderCURD = {
         order: [["createdAt", "DESC"]],
         transaction: t,
       });
+
       if (!checkReservation) {
         await t.rollback();
+        return res.status(409).json({
+          message: `No reservation found for the customer ${customerId}`,
+        });
+      }
+      const checkOrders = await order.findAll({
+        where: {
+          customerId: customerId,
+          status: {
+            [Op.or]: ["pending", "served"], // Check for orders with status pending or served
+          },
+        },
+      });
+
+      if (checkOrders.length > 0) {
+        const existingStatus = checkOrders[0].status;
         return res
           .status(409)
-          .json({ message: `No reservation found for the ${checkCustomerId}` });
+          .json({ message: `User already has a ${existingStatus} order` });
       }
       let totalAmount = 0;
+
+      // Create new order
       const newOrder = await order.create(
         {
           employeeId: userId,
           customerId: customerId || null,
-          tableId: tableId,
+          tableId: checkReservation.tableId,
           status: "pending",
           totalAmount: totalAmount,
         },
         { transaction: t }
       );
 
+      // Process order items
+      for (const item of orderItems) {
+        const checkRecipe = await recipe.findOne({
+          where: { recipeId: item.recipeId },
+          transaction: t,
+        });
+
+        if (!checkRecipe) {
+          await t.rollback();
+          return res.status(400).json({
+            message: `Recipe with ID ${item.recipeId} does not exist`,
+          });
+        }
+
+        const itemTotalPrice = checkRecipe.price * item.quantity;
+        totalAmount += itemTotalPrice;
+
+        // Check and update stock
+        const ingredients = await recipeIngredients.findAll({
+          where: { recipeId: item.recipeId },
+          transaction: t,
+        });
+
+        for (const ingredient of ingredients) {
+          const checkStock = await stock.findOne({
+            where: { ingredientCode: ingredient.ingredCode },
+            transaction: t,
+          });
+
+          if (!checkStock) {
+            await t.rollback();
+            return res.status(409).json({
+              message: `Ingredient ${ingredient.ingredCode} of recipe ${item.recipeId} is not available in stock`,
+            });
+          }
+
+          if (
+            !checkStock.totalQuantity ||
+            checkStock.totalQuantity < ingredient.quantity * item.quantity
+          ) {
+            await t.rollback();
+            return res.status(400).json({
+              message: `Insufficient stock for ingredient ${ingredient.ingredCode} in recipe ID ${item.recipeId}`,
+            });
+          }
+
+          const newQuantity =
+            checkStock.totalQuantity - ingredient.quantity * item.quantity;
+
+          await checkStock.update(
+            { totalQuantity: newQuantity },
+            { transaction: t }
+          );
+        }
+
+        // Create order item
+        await orderItem.create(
+          {
+            orderId: newOrder.id,
+            recipeId: item.recipeId,
+            quantity: item.quantity,
+            price: checkRecipe.price,
+          },
+          { transaction: t }
+        );
+      }
+
+      // Update totalAmount in order
+      await newOrder.update({ totalAmount: totalAmount }, { transaction: t });
+
+      // Commit transaction
+      await t.commit();
+
+      return res.status(201).json({
+        message: `Order created successfully!`,
+        newOrder,
+      });
+    } catch (error) {
+      await t.rollback();
+      console.error(error);
+      return res.status(500).json({ message: "Internal Server Error!!" });
+    }
+  },
+
+  add: async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+      const id = parseInt(req.params.id);
+      const checkOrder = await order.findByPk(id);
+      if (!checkOrder) {
+        return res.status(404).json({ message: `No order with this id ${id}` });
+      }
+
+      if (checkOrder.status === "billed") {
+        return res.status(409).json({
+          message: `Order with id ${id} has already been billed.`,
+        });
+      }
+      const { orderItems } = req.body;
+      let totalAmount = checkOrder.totalAmount;
       for (const item of orderItems) {
         const checkRecipe = await recipe.findOne({
           where: { recipeId: item.recipeId },
@@ -145,7 +266,7 @@ const orderCURD = {
         }
         await orderItem.create(
           {
-            orderId: newOrder.id,
+            orderId: id,
             recipeId: item.recipeId,
             quantity: item.quantity,
             price: checkRecipe.price,
@@ -153,15 +274,14 @@ const orderCURD = {
           { transaction: t }
         );
       }
-      await newOrder.update({ totalAmount: totalAmount }, { transaction: t });
+      await checkOrder.update({ totalAmount: totalAmount }, { transaction: t });
       await t.commit();
-      return res.status(201).json({
-        message: `Order created successfully!`,
-        newOrder,
+      return res.status(200).json({
+        message: `Item added successfully!`,
+        checkOrder,
       });
     } catch (error) {
-      await t.rollback();
-      console.error(error);
+      console.log(error);
       res.status(500).json({ message: "Internal Server Error!!" });
     }
   },
@@ -169,12 +289,12 @@ const orderCURD = {
     try {
       const id = req.params.id;
       const checkOrder = await order.findByPk(id, {
-        where: { status: "pending" },
+        where: { status: "processed" },
       });
       if (!checkOrder) {
         return res.status(404).json({ message: `No order with this id ${id}` });
       }
-      if (!checkOrder.status === "pending") {
+      if (!checkOrder.status === "processed") {
         return res
           .status(401)
           .json({ message: `Order with ${id} status is ${checkOrder.status}` });
@@ -187,10 +307,34 @@ const orderCURD = {
       res.status(500).json({ message: "Internal Server Error!!" });
     }
   },
+  prepares: async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      console.log(id);
+      const checkOrder = await order.findByPk(id, {
+        where: { status: "pending" },
+      });
+      if (!checkOrder) {
+        return res.status(404).json({ message: `No order with this id ${id}` });
+      }
+      if (!checkOrder.status === "pending") {
+        return res
+          .status(401)
+          .json({ message: `Order with ${id} status is ${checkOrder.status}` });
+      }
+      await checkOrder.update({
+        status: "processed",
+      });
+      res.status(200).json({ message: `Order with id ${id} is prepared ` });
+    } catch (error) {
+      res.status(500).json({ message: "Internal Server Error!!" });
+    }
+  },
   bill: async (req, res) => {
     const t = await sequelize.transaction();
     try {
       const id = req.params.id;
+      const { paymentMethod } = req.body;
       const checkOrder = await order.findByPk(id);
       if (!checkOrder) {
         return res.status(404).json({ message: `No order with this id ${id}` });
@@ -200,9 +344,18 @@ const orderCURD = {
           .status(409)
           .json({ message: `Order with ${id} status is ${checkOrder.status}` });
       }
+      let taxRate = 0.16;
+      if (paymentMethod === "card") {
+        taxRate = 0.05;
+      }
+      const taxAmount = checkOrder.totalAmount * taxRate;
+      const totalAmountWithTax = checkOrder.totalAmount + taxAmount;
       await checkOrder.update(
         {
           status: "billed",
+          tax: taxRate,
+          paymentMethod,
+          totalAmountWithTax,
         },
         { transaction: t }
       );
@@ -226,16 +379,82 @@ const orderCURD = {
       res.status(500).json({ message: "Internal Server Error!!" });
     }
   },
+
   delete: async (req, res) => {
+    const t = await sequelize.transaction();
     try {
-      const id = req.params.id;
-      const singleOrder = await order.findByPk(id);
-      if (!singleOrder) {
-        return res.status(404).json({ message: `No order with this ${id}` });
+      const id = parseInt(req.params.id);
+      const checkOrder = await order.findByPk(id, { transaction: t });
+
+      if (!checkOrder) {
+        await t.rollback();
+        return res.status(404).json({ message: `No order with id ${id}` });
       }
-      await singleOrder.destroy();
+      if (checkOrder.status !== "pending") {
+        await t.rollback();
+        return res.status(409).json({
+          message: `Order with id ${id} has status ${checkOrder.status}. Cannot be deleted.`,
+        });
+      }
+
+      const orderItems = await orderItem.findAll({
+        where: { orderId: id },
+        transaction: t,
+      });
+      for (const item of orderItems) {
+        const checkRecipe = await recipe.findByPk(item.recipeId, {
+          transaction: t,
+        });
+
+        if (!checkRecipe) {
+          await t.rollback();
+          return res.status(400).json({
+            message: `Recipe with ID ${item.recipeId} not found.`,
+          });
+        }
+
+        const ingredients = await recipeIngredients.findAll({
+          where: { recipeId: item.recipeId },
+          transaction: t,
+        });
+
+        for (const ingredient of ingredients) {
+          const checkStock = await stock.findOne({
+            where: { ingredientCode: ingredient.ingredCode },
+            transaction: t,
+          });
+
+          if (!checkStock) {
+            await t.rollback();
+            return res.status(409).json({
+              message: `Ingredient ${ingredient.ingredCode} of recipe ${item.recipeId} is not available in stock`,
+            });
+          }
+
+          const newQuantity =
+            checkStock.totalQuantity + ingredient.quantity * item.quantity;
+
+          await checkStock.update(
+            {
+              totalQuantity: newQuantity,
+            },
+            { transaction: t }
+          );
+        }
+      }
+
+      // Delete order and order items
+      await orderItem.destroy({ where: { orderId: id }, transaction: t });
+      await order.destroy({ where: { id: id }, transaction: t });
+
+      await t.commit();
+      return res.status(200).json({
+        message: `Order with id ${id} deleted successfully.`,
+      });
     } catch (error) {
-      res.status(500).json({ message: "Internal Server Error!!" });
+      console.error(error);
+      await t.rollback();
+      return res.status(500).json({ message: "Internal Server Error!" });
     }
   },
 };
