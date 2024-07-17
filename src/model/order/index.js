@@ -34,6 +34,16 @@ const order = sequelize.define("Order", {
     defaultValue: "pending",
     allowNull: false,
   },
+  tax: {
+    type: DataTypes.FLOAT,
+
+    defaultValue: 0.16,
+  },
+  paymentMethod: {
+    type: DataTypes.ENUM("card", "cash"),
+    defaultValue: "cash",
+  },
+  totalAmountWithTax: { type: DataTypes.FLOAT, allowNull: true },
   totalAmount: {
     type: DataTypes.FLOAT,
     allowNull: false,

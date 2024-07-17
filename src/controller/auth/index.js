@@ -66,7 +66,6 @@ const userController = {
         expiresIn: "5h",
       });
       const expiresAt = new Date();
-      // expiresAt.setMinutes(expiresAt.getMinutes() + 1);
       expiresAt.setHours(expiresAt.getHours() + 5);
       await tokenModel.create(
         {
@@ -120,6 +119,11 @@ const userController = {
           message: "Email not verified",
         });
       }
+      if (user.allowAcess === false) {
+        return res.status(401).json({
+          message: "Access not Allowed",
+        });
+      }
       const existingToken = await tokenModel.findOne({
         where: { UserId: user.id },
       });
@@ -143,8 +147,14 @@ const userController = {
         UserId: user.id,
         expiresAt,
       });
-
-      res.status(200).json({ message: "Login Successfully", token });
+      const userInfo = {
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        userId: user.id,
+      };
+      res.status(200).json({ message: "Login Successfully", token, userInfo });
     } catch (error) {
       console.log(error);
       res.status(500).json({ message: "Internal Server Error!!" });
@@ -178,11 +188,11 @@ const userController = {
   },
   update: async (req, res) => {
     try {
-      const payload = req.body;
-      const data = res.locals.user;
+      const { email, oldPassword, newPassword } = req.body;
+
       const user = await userModel.findOne({
         where: {
-          email: data.email,
+          email: email,
         },
       });
       if (!user) {
@@ -190,13 +200,13 @@ const userController = {
           message: "Invalid Credentials!",
         });
       }
-      const comaprePassword = await compare(payload.oldPassword, user.password);
+      const comaprePassword = await compare(oldPassword, user.password);
       if (!comaprePassword) {
         return res.status(401).json({
           message: "Invalid Credentials!",
         });
       }
-      const hpassowrd = await hash(payload.newPassword, 10);
+      const hpassowrd = await hash(newPassword, 10);
       user.password = hpassowrd;
       await user.save();
       res.status(200).json({ message: "User Password Updated Successfully" });
@@ -244,10 +254,69 @@ const userController = {
         expiresAt,
       });
       const message = `${process.env.BASE_URL}/user/verify/${user.id}/${token}`;
-      await sendEmail(user.email, "Verify Email", message);
+      const emailData = {
+        fname: user.firstName,
+        lname: user.lastName,
+        link: message,
+      };
+      await sendEmail(
+        email,
+        "Verify Email",
+        "verify_email.handlebars",
+        emailData
+      );
+
       res
         .status(200)
         .json({ message: "A new verification email has been sent!" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  },
+  addSalary: async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      console.log(id);
+      const { salary } = req.body;
+      const checkUser = await userModel.findByPk(id);
+      if (!checkUser) {
+        return res.status(404).json({ message: `No user with this ${id}` });
+      }
+      checkUser.salary = salary;
+      await checkUser.save();
+      res.status(200).json({ message: `Salary of user ${id} updated` });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  },
+
+  allowAccess: async (req, res) => {
+    try {
+      const id = req.params.id;
+      const checkUser = await userModel.findByPk(id);
+      if (!checkUser) {
+        return res.status(404).json({ message: `No user with this ${id}` });
+      }
+      checkUser.allowAcess = true;
+      await checkUser.save();
+      res.status(200).json({ message: `Access granted to user ${id}` });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  },
+  invokeAccess: async (req, res) => {
+    try {
+      const id = req.params.id;
+      const checkUser = await userModel.findByPk(id);
+      if (!checkUser) {
+        return res.status(404).json({ message: `No user with this ${id}` });
+      }
+      checkUser.allowAcess = false;
+      await checkUser.save();
+      res.status(200).json({ message: `Access of user ${id} is invoked` });
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: "Internal Server Error" });

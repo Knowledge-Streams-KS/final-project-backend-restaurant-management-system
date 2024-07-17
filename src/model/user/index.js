@@ -22,7 +22,15 @@ const userModel = sequelize.define("Users", {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  salary: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
   verified: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
+  allowAcess: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   },

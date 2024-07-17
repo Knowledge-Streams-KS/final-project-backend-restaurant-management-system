@@ -20,6 +20,7 @@ const reservationCURD = {
             model: timeSlotModel,
           },
         ],
+        order: [["date", "DESC"]],
       });
       res.status(200).json(allReservations);
     } catch (error) {
@@ -47,8 +48,16 @@ const reservationCURD = {
   create: async (req, res) => {
     const t = await sequelize.transaction();
     try {
-      const { fName, lName, email, phoneNo, date, TimeSlotId, reservedBy } =
-        req.body;
+      const {
+        fName,
+        lName,
+        email,
+        phoneNo,
+        date,
+        TimeSlotId,
+        seats,
+        reservedBy,
+      } = req.body;
       let customer = await customerModel.findOne({
         where: { email },
         transaction: t,
@@ -138,14 +147,15 @@ const reservationCURD = {
           date,
           TimeSlotId: timeSlot.id,
           reservedBy,
+          seats,
           status: reservedBy === "employee" ? "checked-in" : "pending",
         },
         { transaction: t }
       );
       if (reservedBy === "customer") {
-        const customerId = customer.id;
-        console.log(customerId);
-        generateAndSendOtp(customerId, t);
+        const email = customer.email;
+
+        generateAndSendOtp(email, t);
       }
       await t.commit();
       return res.status(201).json({
@@ -157,34 +167,7 @@ const reservationCURD = {
       res.status(500).json({ message: "Internal Server Error!!" });
     }
   },
-  update: async (req, res) => {
-    try {
-      const { reservationId, newStartTime, newEndTime } = req.body;
-      const existingReservation = await reservation.findByPk(reservationId);
-      if (!existingReservation) {
-        return res.status(404).json({ message: "Reservation not found" });
-      }
-      const checkOrderTable = await findAvailableTable(
-        newStartTime,
-        newEndTime
-      );
-      if (!checkOrderTable) {
-        return res.status(409).json({
-          message: `No table available for the time slot ${newStartTime}-${newEndTime}`,
-        });
-      }
-      existingReservation.startTime = newStartTime;
-      existingReservation.endTime = newEndTime;
-      await existingReservation.save();
-      return res.status(200).json({
-        message: "Reservation time slots updated successfully",
-        updatedReservation: existingReservation,
-      });
-    } catch (error) {
-      console.log(error);
-      return res.status(500).json({ message: "Internal Server Error" });
-    }
-  },
+
   updateStatus: async (req, res) => {
     try {
       const { reservationId, userId } = req.body;
@@ -224,17 +207,38 @@ const reservationCURD = {
   },
   delete: async (req, res) => {
     try {
-      const id = req.paramas.id;
+      const id = parseInt(req.params.id);
       const singleReservation = await reservation.findOne({
-        where: { customerId: id },
+        where: { id: id },
       });
       if (!singleReservation) {
         return res
           .status(404)
           .json({ message: `No reservation found for this id ${id}` });
       }
+      if (
+        singleReservation.status !== "pending" &&
+        singleReservation.status !== "confirmed"
+      ) {
+        return res.status(409).json({
+          message: `Reservation with id ${id} cannot be deleted. Only reservations with status "pending" or "confirmed" can be deleted.`,
+        });
+      }
+      await singleReservation.destroy();
       res.status(200).json({ message: `Reservation deleted with ${id}` });
     } catch (error) {
+      console.log(error);
+      res.status(500).json({ message: "Internal Server Error!!" });
+    }
+  },
+  resendOtp: async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+      const { email } = req.body;
+      await generateAndSendOtp(email, t);
+      res.status(200).json({ message: "OTP send again!" });
+    } catch (error) {
+      console.log(error);
       res.status(500).json({ message: "Internal Server Error!!" });
     }
   },
