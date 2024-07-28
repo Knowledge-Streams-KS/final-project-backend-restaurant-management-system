@@ -5,6 +5,7 @@ import { Op } from "sequelize";
 import reservation from "../../model/reservation/index.js";
 import customerModel from "../../model/user/customer.js";
 import timeSlotModel from "../../model/timeslots/index.js";
+import { io } from "../../app.js";
 
 const generateOtpCode = () => {
   return otpGenerator.generate(5, {
@@ -76,6 +77,9 @@ const validateOtp = async (req, res) => {
       where: {
         customerId: checkCustomer.id,
         status: "pending",
+        expiresAt: {
+          [Op.gt]: new Date(),
+        },
       },
       order: [["createdAt", "DESC"]],
       include: [
@@ -87,9 +91,22 @@ const validateOtp = async (req, res) => {
     });
 
     if (!reservationRecord) {
-      return res.status(404).json({ message: "No pending reservation found" });
+      return res
+        .status(404)
+        .json({
+          message: "No pending reservation or reservation expired found",
+        });
     }
-    await reservationRecord.update({ status: "confirmed" });
+    const startTimeUTC = moment
+      .tz(
+        `${reservationRecord.date} ${reservationRecord.TimeSlot.startTime}`,
+        "YYYY-MM-DD HH:mm",
+        "Asia/Karachi"
+      )
+      .utc()
+      .toISOString();
+    const expiresAt = moment.utc(startTimeUTC).add(30, "minutes").toDate();
+    await reservationRecord.update({ status: "confirmed", expiresAt });
 
     const data = {
       fname: reservationRecord.Customer.firstName,
@@ -98,6 +115,7 @@ const validateOtp = async (req, res) => {
       stime: reservationRecord.TimeSlot.startTime,
       etime: reservationRecord.TimeSlot.endTime,
       tableId: reservationRecord.tableId,
+      seats: reservationRecord.seats,
     };
     await sendEmail(
       reservationRecord.Customer.email,
@@ -106,7 +124,7 @@ const validateOtp = async (req, res) => {
       data
     );
     await otpRecord.destroy();
-
+    io.emit("reservationUpdated", reservationRecord);
     return res.status(200).json({
       message: "OTP validated and reservation confirmed",
       reservation: reservationRecord,

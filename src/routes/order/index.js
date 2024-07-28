@@ -9,13 +9,13 @@ const orderAuth = Router();
 orderAuth.get(
   "/orders",
   authenticateToken,
-  checkRole([roles.ADMIN, roles.WAITER]),
+  checkRole([roles.ADMIN, roles.WAITER, roles.CHEF]),
   orderCURD.getAll
 );
 orderAuth.get(
   "/order/:id",
   authenticateToken,
-  checkRole([roles.ADMIN, roles.WAITER]),
+  checkRole([roles.ADMIN, roles.WAITER, roles.CHEF]),
   orderCURD.getSingle
 );
 orderAuth.post(

@@ -1,6 +1,5 @@
 import { Op } from "sequelize";
 import sequelize from "../../db/config.js";
-import findAvailableTable from "../../middlewear/checkTable/index.js";
 import recipeIngredients from "../../model/ingredients/index.js";
 import order from "../../model/order/index.js";
 import orderItem from "../../model/order/orderItem.js";
@@ -9,6 +8,7 @@ import reservation from "../../model/reservation/index.js";
 import stock from "../../model/stock/index.js";
 import userModel from "../../model/user/index.js";
 import customerModel from "../../model/user/customer.js";
+import { io } from "../../app.js";
 
 const orderCURD = {
   getAll: async (req, res) => {
@@ -76,7 +76,9 @@ const orderCURD = {
       const checkReservation = await reservation.findOne({
         where: {
           customerId: customerId,
-          status: "checked-in",
+          status: {
+            [Op.in]: ["confirmed", "checked-in"],
+          },
         },
         order: [["createdAt", "DESC"]],
         transaction: t,
@@ -88,11 +90,17 @@ const orderCURD = {
           message: `No reservation found for the customer ${customerId}`,
         });
       }
+      if (checkReservation.status === "confirmed") {
+        await checkReservation.update(
+          { status: "checked-in", expiresAt: null },
+          { transaction: t }
+        );
+      }
       const checkOrders = await order.findAll({
         where: {
           customerId: customerId,
           status: {
-            [Op.or]: ["pending", "served"], // Check for orders with status pending or served
+            [Op.or]: ["pending", "served"],
           },
         },
       });
@@ -185,11 +193,17 @@ const orderCURD = {
       }
 
       // Update totalAmount in order
-      await newOrder.update({ totalAmount: totalAmount }, { transaction: t });
+      await newOrder.update(
+        { totalAmount: totalAmount, status: "pending" },
+        { transaction: t }
+      );
 
       // Commit transaction
       await t.commit();
-
+      io.emit("newOrder", {
+        ...newOrder.dataValues,
+        orderItems: orderItems || [],
+      });
       return res.status(201).json({
         message: `Order created successfully!`,
         newOrder,
@@ -200,7 +214,6 @@ const orderCURD = {
       return res.status(500).json({ message: "Internal Server Error!!" });
     }
   },
-
   add: async (req, res) => {
     const t = await sequelize.transaction();
     try {
@@ -276,7 +289,8 @@ const orderCURD = {
       }
       await checkOrder.update({ totalAmount: totalAmount }, { transaction: t });
       await t.commit();
-      return res.status(200).json({
+      io.emit("orderUpdated", { id, orderItems });
+      res.status(200).json({
         message: `Item added successfully!`,
         checkOrder,
       });
@@ -288,21 +302,22 @@ const orderCURD = {
   update: async (req, res) => {
     try {
       const id = req.params.id;
-      const checkOrder = await order.findByPk(id, {
-        where: { status: "processed" },
-      });
+      const checkOrder = await order.findByPk(id);
       if (!checkOrder) {
         return res.status(404).json({ message: `No order with this id ${id}` });
       }
-      if (!checkOrder.status === "processed") {
+      if (checkOrder.status === "processed") {
+        await checkOrder.update({
+          status: "served",
+        });
+        io.emit("orderStatusUpdated", { id, status: "served" });
         return res
-          .status(401)
-          .json({ message: `Order with ${id} status is ${checkOrder.status}` });
+          .status(200)
+          .json({ message: `Order with id ${id} is served ` });
       }
-      await checkOrder.update({
-        status: "served",
+      res.status(401).json({
+        message: `Order with ${id} status is ${checkOrder.status}`,
       });
-      res.status(200).json({ message: `Order with id ${id} is served ` });
     } catch (error) {
       res.status(500).json({ message: "Internal Server Error!!" });
     }
@@ -311,21 +326,22 @@ const orderCURD = {
     try {
       const id = parseInt(req.params.id);
       console.log(id);
-      const checkOrder = await order.findByPk(id, {
-        where: { status: "pending" },
-      });
+      const checkOrder = await order.findByPk(id);
       if (!checkOrder) {
         return res.status(404).json({ message: `No order with this id ${id}` });
       }
-      if (!checkOrder.status === "pending") {
+      if (checkOrder.status === "pending") {
+        await checkOrder.update({
+          status: "processed",
+        });
+        io.emit("orderStatusUpdated", { id, status: "processed" });
         return res
-          .status(401)
-          .json({ message: `Order with ${id} status is ${checkOrder.status}` });
+          .status(200)
+          .json({ message: `Order with id ${id} is prepared ` });
       }
-      await checkOrder.update({
-        status: "processed",
-      });
-      res.status(200).json({ message: `Order with id ${id} is prepared ` });
+      res
+        .status(401)
+        .json({ message: `Order with ${id} status is ${checkOrder.status}` });
     } catch (error) {
       res.status(500).json({ message: "Internal Server Error!!" });
     }
@@ -373,13 +389,13 @@ const orderCURD = {
         );
       }
       await t.commit();
+      io.emit("orderStatusUpdated", { id, status: "billed" });
       res.status(200).json({ message: `Order Completed`, checkOrder });
     } catch (error) {
       console.log(error);
       res.status(500).json({ message: "Internal Server Error!!" });
     }
   },
-
   delete: async (req, res) => {
     const t = await sequelize.transaction();
     try {

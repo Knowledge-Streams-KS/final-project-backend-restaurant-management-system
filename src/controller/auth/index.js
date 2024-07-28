@@ -20,12 +20,21 @@ const userController = {
   },
   getSingle: async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = res.locals.user.id;
+
       const user = await userModel.findByPk(id);
       if (!user) {
         return res.status(401).json({ message: "User not found!" });
       }
-      res.status(200).json({ user });
+      const userInfo = {
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        userId: user.id,
+      };
+      console.log(userInfo);
+      res.status(200).json({ userInfo });
     } catch (error) {
       console.log(error);
       res.status(500).json({ message: "Internal Server Error!" });
