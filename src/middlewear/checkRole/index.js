@@ -5,7 +5,7 @@ const checkRole = (allowedRoles) => {
       console.log("----------------Allowed Roles-------", allowedRoles);
       next();
     } else {
-      return res.status(403).json({
+      return res.status(401).json({
         message: "Forbidden: You do not have the necessary permissions",
       });
     }

@@ -8,7 +8,7 @@ const recipeRouter = Router();
 recipeRouter.get(
   "/recipes",
   authenticateToken,
-  checkRole([roles.ADMIN, roles.CHEF]),
+  checkRole([roles.ADMIN, roles.CHEF, roles.WAITER]),
   recipeCurd.getAll
 );
 recipeRouter.get(

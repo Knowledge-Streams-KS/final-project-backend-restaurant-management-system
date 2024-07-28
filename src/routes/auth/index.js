@@ -14,7 +14,7 @@ authRouter.get(
   checkRole([roles.ADMIN]),
   userController.getAll
 );
-authRouter.get("/user/:id", userController.getSingle);
+authRouter.get("/user", authenticateToken, userController.getSingle);
 authRouter.delete("/user/:id", userController.delete);
 authRouter.get("/user/verify/:id/:token", emailVerification);
 authRouter.post("/auth/verifytoken", userController.signUpToken);

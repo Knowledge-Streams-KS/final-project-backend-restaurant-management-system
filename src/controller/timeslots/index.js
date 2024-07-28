@@ -17,7 +17,7 @@ const timeSlots = {
       const existingSlots = await timeSlotModel.findAll();
       if (existingSlots.length === 0) {
         const slots = [];
-        const startTime = moment.tz("12:00 PM", "h:mm A", "Asia/Karachi");
+        const startTime = moment.tz("9:00 AM", "h:mm A", "Asia/Karachi");
         const endTime = moment
           .tz("1:00 AM", "h:mm A", "Asia/Karachi")
           .add(1, "day");

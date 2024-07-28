@@ -7,6 +7,8 @@ import { generateAndSendOtp } from "../../utils/otp/index.js";
 import timeSlotModel from "../../model/timeslots/index.js";
 import userModel from "../../model/user/index.js";
 import { Op } from "sequelize";
+import order from "../../model/order/index.js";
+import { io } from "../../app.js";
 
 const reservationCURD = {
   getAll: async (req, res) => {
@@ -15,6 +17,7 @@ const reservationCURD = {
         include: [
           {
             model: customerModel,
+            include: [{ model: order }],
           },
           {
             model: timeSlotModel,
@@ -149,6 +152,10 @@ const reservationCURD = {
           reservedBy,
           seats,
           status: reservedBy === "employee" ? "checked-in" : "pending",
+          expiresAt:
+            reservedBy === "customer"
+              ? moment().add(15, "minutes").toDate()
+              : null,
         },
         { transaction: t }
       );
@@ -158,16 +165,25 @@ const reservationCURD = {
         generateAndSendOtp(email, t);
       }
       await t.commit();
+
+      const completeReservation = await reservation.findOne({
+        where: { id: newReservation.id },
+        include: [
+          { model: customerModel, as: "Customer" },
+          { model: timeSlotModel, as: "TimeSlot" },
+        ],
+      });
+      console.log(completeReservation);
+      io.emit("reservationCreated", completeReservation);
       return res.status(201).json({
         message: "Reservation created successfully",
-        newReservation,
+        reservation: completeReservation,
       });
     } catch (error) {
       console.log(error);
       res.status(500).json({ message: "Internal Server Error!!" });
     }
   },
-
   updateStatus: async (req, res) => {
     try {
       const { reservationId, userId } = req.body;
@@ -192,7 +208,9 @@ const reservationCURD = {
       const reservationEndTime = new Date(checkReservation.endTime);
       if (now >= reservationStartTime && now <= reservationEndTime) {
         checkReservation.status = "checked-in";
+
         await checkReservation.save();
+        io.emit("reservationUpdated", checkReservation);
         return res.json({
           message: "Reservation status updated to checked-in",
         });
@@ -225,6 +243,7 @@ const reservationCURD = {
         });
       }
       await singleReservation.destroy();
+      io.emit("reservationDeleted", { id });
       res.status(200).json({ message: `Reservation deleted with ${id}` });
     } catch (error) {
       console.log(error);
